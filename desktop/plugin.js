@@ -397,9 +397,36 @@ function ChipLabel() {
     refetchInterval: 60_000
   })
 
-  const s = data ? Math.round(pct(data.session?.usage) * 100) : null
-  const w = data ? Math.round(pct(data.weekly?.usage) * 100) : null
-  const text = error ? 'err' : data ? `S:${s}% W:${w}%` : '…'
+  // The logo stays neutral; each percentage is tinted by its own severity
+  // (accent under 75%, yellow >=75%, red >=90%) — same scale as the gauges.
+  let content
+  if (error) {
+    content = jsx('span', { style: { color: C.bad }, children: 'err' })
+  } else if (!data) {
+    content = jsx('span', { style: { color: C.tertiary }, children: '…' })
+  } else {
+    const sv = pct(data.session?.usage)
+    const wv = pct(data.weekly?.usage)
+    content = jsxs('span', {
+      style: { display: 'inline-flex', gap: 5 },
+      children: [
+        jsxs('span', {
+          style: { color: colorFor(sv) },
+          children: [
+            jsx('span', { style: { color: C.quaternary }, children: 'S:' }),
+            `${Math.round(sv * 100)}%`
+          ]
+        }),
+        jsxs('span', {
+          style: { color: colorFor(wv) },
+          children: [
+            jsx('span', { style: { color: C.quaternary }, children: 'W:' }),
+            `${Math.round(wv * 100)}%`
+          ]
+        })
+      ]
+    })
+  }
 
   return jsxs('span', {
     style: {
@@ -408,7 +435,7 @@ function ChipLabel() {
       gap: 5,
       fontVariantNumeric: 'tabular-nums'
     },
-    children: [jsx(Logo, { size: 13 }), jsx('span', { children: text })]
+    children: [jsx(Logo, { size: 13 }), content]
   })
 }
 
