@@ -14,8 +14,10 @@ per-model request breakdown, straight from the official
   ≥75%, red ≥90%.
 - **Click the chip** → a popover with:
   - Two **ring gauges** (Session and Weekly) with the weekly reset countdown.
-  - A **"Requests this week"** per-model bar chart, sorted by request count —
-    see at a glance which models you're burning quota on.
+  - A per-model bar chart — **"This session"** first (the window you're actively
+    burning, shown whenever the current session has activity), then
+    **"This week"** — sorted by request count, so you can see at a glance which
+    models are eating your quota.
 - **Auto-refresh** every 60s, a manual refresh button in the popover, and a
   command-palette action (`Ollama Cloud: Refresh usage`).
 - **Hideable** — right-click the statusbar and toggle *Ollama Cloud* on/off,
@@ -52,23 +54,37 @@ or `~/.hermes/.env`, and normalizes it for the UI.
 ## Install
 
 The whole plugin is ONE folder — the Python backend and the desktop UI ship
-together:
+together.
+
+### Recommended — `hermes plugins install`
 
 ```bash
-# 1. Clone into your Hermes plugins directory
-git clone https://github.com/mpartipilo/ollama-cloud-usage \
-  ~/.hermes/plugins/ollama-cloud-usage
+# Installs into ~/.hermes/plugins/ollama-cloud-usage and prompts to enable
+hermes plugins install mpartipilo/ollama-cloud-usage
 
-# 2. Enable the backend (adds it to plugins.enabled in config.yaml)
-hermes plugins enable ollama-cloud-usage
-
-# 3. Restart the backend so the /api/plugins/... route mounts
+# Restart the backend so the /api/plugins/... route mounts
 hermes serve   # or restart your existing serve/gateway process
 ```
 
-Then in the desktop app: **Settings ▸ Plugins → toggle "Ollama Cloud Usage" on**,
-and fully quit + relaunch (⌘Q, not just closing the window) so the renderer picks
-up the new `plugin.js`.
+`mpartipilo/ollama-cloud-usage` is the `owner/repo` shorthand; a full Git URL
+(`hermes plugins install https://github.com/mpartipilo/ollama-cloud-usage`)
+works identically. Neither needs a plugin index — they resolve straight from
+GitHub.
+
+### Manual (clone)
+
+```bash
+git clone https://github.com/mpartipilo/ollama-cloud-usage \
+  ~/.hermes/plugins/ollama-cloud-usage
+hermes plugins enable ollama-cloud-usage   # adds it to plugins.enabled
+hermes serve                                # restart to mount the route
+```
+
+### Finish in the app
+
+In the desktop app: **Settings ▸ Plugins → toggle "Ollama Cloud Usage" on**,
+then fully quit + relaunch (⌘Q, not just closing the window) so the renderer
+picks up `plugin.js`.
 
 ## Requirements
 
