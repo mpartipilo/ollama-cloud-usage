@@ -357,19 +357,40 @@ function UsageContent({ compact }) {
       ]
     })
 
-    // Per-model breakdown (weekly = the richer window). This is the centerpiece.
+    // Per-model breakdowns. Session first (the window you're actively burning)
+    // and only when it has activity — a fresh 5h window has no models yet.
+    // Weekly follows as the broader context.
+    const section = (key, title, models, max) =>
+      jsxs(
+        'div',
+        {
+          style: { display: 'flex', flexDirection: 'column', gap: 6 },
+          children: [
+            jsx('div', {
+              style: { fontSize: 11, fontWeight: 500, color: C.secondary },
+              children: title
+            }),
+            jsx('div', {
+              style: { maxHeight: max, overflowY: 'auto', paddingRight: 2 },
+              children: jsx(ModelBars, { models })
+            })
+          ]
+        },
+        key
+      )
+
+    const sessionModels = data.session?.models || []
+    const sections = []
+    if (sessionModels.length > 0) {
+      sections.push(section('session', 'This session', sessionModels, compact ? 132 : 240))
+    }
+    sections.push(
+      section('weekly', 'This week', data.weekly?.models, compact ? 140 : 260)
+    )
+
     const breakdown = jsxs('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: 6 },
-      children: [
-        jsx('div', {
-          style: { fontSize: 11, fontWeight: 500, color: C.secondary },
-          children: 'Requests this week'
-        }),
-        jsx('div', {
-          style: { maxHeight: compact ? 168 : 320, overflowY: 'auto', paddingRight: 2 },
-          children: jsx(ModelBars, { models: data.weekly?.models })
-        })
-      ]
+      style: { display: 'flex', flexDirection: 'column', gap: 12 },
+      children: sections
     })
 
     body = jsxs('div', {
