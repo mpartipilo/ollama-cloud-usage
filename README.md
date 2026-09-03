@@ -1,23 +1,22 @@
 # Ollama Cloud Usage
 
 A [Hermes](https://github.com/NousResearch/hermes) desktop plugin that shows your
-**Ollama Cloud** usage right in the statusbar — session & weekly quotas plus a
-per-model request breakdown, straight from the official
+**Ollama Cloud** usage right in the statusbar — your monthly usage-credit pool and
+a per-model request breakdown, straight from the official
 `GET https://ollama.com/api/usage` endpoint. No cookie scraping, no HTML parsing.
 
 ![Ollama Cloud Usage plugin — statusbar chip and usage popover](assets/screenshot.png)
 
 ## What it shows
 
-- **Statusbar chip** — the Ollama llama logo + a compact `S:25% W:35%` summary
-  (**S**ession / **W**eekly quota used). Color-coded: accent under 75%, yellow
-  ≥75%, red ≥90%.
+- **Statusbar chip** — the Ollama llama logo + a compact `M:28%` summary of the
+  **M**onthly usage-credit pool used. Color-coded: accent under 75%, yellow ≥75%,
+  red ≥90%.
 - **Click the chip** → a popover with:
-  - Two **ring gauges** (Session and Weekly) with the weekly reset countdown.
-  - A per-model bar chart — **"This session"** first (the window you're actively
-    burning, shown whenever the current session has activity), then
-    **"This week"** — sorted by request count, so you can see at a glance which
-    models are eating your quota.
+  - A **ring gauge** for "This month" — the share of your monthly usage credits
+    you've burned — labeled *resets on plan anniversary* (see the reset-time note).
+  - A per-model bar chart — **"This month"** — sorted by request count, so you can
+    see at a glance which models are eating your monthly quota.
 - **Auto-refresh** every 60s, a manual refresh button in the popover, and a
   command-palette action (`Ollama Cloud: Refresh usage`).
 - **Hideable** — right-click the statusbar and toggle *Ollama Cloud* on/off,
@@ -94,17 +93,15 @@ picks up `plugin.js`.
 
 ## A note on reset times
 
-The Ollama usage API does **not** return reset timestamps, so this plugin derives
-what it honestly can:
+The Ollama usage API does **not** return reset timestamps. Since Sept 2026,
+Ollama measures usage as a **monthly usage-credit pool** (per-token billing; the
+monthly reset is on your plan's **subscription anniversary** — the same day of
+month your plan started). That anniversary is **not** in the `/api/usage`
+payload: the only time data there is `activity.period`, a rolling
+`last_4_weeks` window unrelated to the anniversary. So the plugin labels the
+gauge *resets on plan anniversary* rather than faking a countdown.
 
-- **Weekly** — derived from the response's `activity.period.starting_at` (the
-  start of the rolling billing window, a weekday-00:00-UTC boundary). The next
-  reset is `starting_at + N × 7 days` — fully data-driven, no hard-coded clock.
-- **Session** — a rolling 5-hour window that resets 5h after your first request
-  in the window. The API exposes no anchor for this, so the plugin **omits** the
-  session countdown rather than showing a guess (it's labeled "rolling 5h window").
-
-`usage` values are 0–1 fractions of each quota window.
+`usage` is a 0–1 fraction of your monthly allowance.
 
 ## License
 

@@ -1,8 +1,8 @@
 {
   "name": "ollama-cloud-usage",
   "label": "Ollama Cloud",
-  "description": "Live Ollama Cloud usage — session & weekly quotas and per-model request counts, from the official /api/usage endpoint.",
+  "description": "Live Ollama Cloud usage — monthly usage credit pool and per-model request counts, from the official /api/usage endpoint.",
   "icon": "Cloud",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "api": "plugin_api.py"
 }

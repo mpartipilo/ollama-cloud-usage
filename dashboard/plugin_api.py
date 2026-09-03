@@ -4,22 +4,26 @@ Mounted at /api/plugins/ollama-cloud-usage/ by the dashboard plugin system.
 
 Thin proxy over the official Ollama Cloud endpoint ``GET https://ollama.com/api/usage``
 (authenticated with ``Authorization: Bearer $OLLAMA_API_KEY``). No cookie scraping,
-no HTML parsing — the API returns session/weekly quota fractions and per-model
-request counts directly.
+no HTML parsing — the API returns the monthly usage fraction and per-model request
+counts directly.
 
-The API does NOT expose reset timestamps. The weekly reset is DERIVED from the
-response's ``activity.period.starting_at`` (a weekday-00:00-UTC boundary); the
-session reset is a rolling 5h window with no exposed anchor and is left null.
+Since Sept 2026 Ollama reports a single ``limits.monthly`` window (monthly usage
+credits under the per-token billing model) instead of the old ``session``/``weekly``
+GPU-time quotas.
+
+Reset time: the monthly usage resets on your plan's *subscription anniversary* (the
+same day-of-month your plan started), which this endpoint does NOT expose. The only
+time data in the payload is ``activity.period`` — a rolling ``last_4_weeks`` window
+unrelated to the anniversary. So ``monthly.resets_at`` is omitted/None rather than
+guessed.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import os
 import urllib.request
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -28,19 +32,6 @@ router = APIRouter()
 USAGE_URL = "https://ollama.com/api/usage"
 TIMEOUT = 15
 
-# Reset times are NOT returned by the API, so we derive what we can from data:
-#
-# WEEKLY: the response's ``activity.period.starting_at`` is the start of the
-# rolling billing window, anchored to a weekday 00:00 UTC (Monday for the
-# accounts observed). The weekly limit resets on that same weekday boundary, so
-# the next reset is ``starting_at + N*7d`` — fully data-driven, no hard-coding.
-#
-# SESSION: a rolling 5-hour window that resets 5h after the first request in the
-# window. The API exposes no timestamp to anchor this, so it can't be derived
-# reliably; ``session.resets_at`` is therefore omitted rather than guessed.
-WEEK = timedelta(days=7)
-SESSION_BLOCK = timedelta(hours=5)
-
 
 def _load_api_key() -> str:
     """Resolve the Ollama API key: env var first, then ~/.hermes/.env."""
@@ -48,43 +39,19 @@ def _load_api_key() -> str:
     if key:
         return key
 
-    env_file = Path.home() / ".hermes" / ".env"
+    env_file = os.path.expanduser("~/.hermes/.env")
     try:
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("OLLAMA_API_KEY="):
-                    value = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    if value:
-                        return value
+        if os.path.exists(env_file):
+            with open(env_file, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line.startswith("OLLAMA_API_KEY="):
+                        value = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if value:
+                            return value
     except OSError:
         pass
     return ""
-
-
-def _parse_iso(value: str) -> datetime | None:
-    """Parse an ISO-8601 timestamp (handles a trailing 'Z' and fractional secs)."""
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def _next_weekly_reset(now: datetime, starting_at: datetime | None) -> datetime | None:
-    """Next weekly reset, phased off the billing window's ``starting_at``.
-
-    ``starting_at`` is a weekday 00:00 UTC boundary; the weekly limit resets on
-    that same boundary each week, so step 7-day blocks forward until we pass now.
-    Returns None if the anchor is missing (so the UI omits the countdown rather
-    than showing a guess).
-    """
-    if starting_at is None:
-        return None
-    blocks = (now - starting_at) / WEEK
-    n = math.floor(blocks) + 1  # first weekly boundary strictly after `now`
-    return starting_at + n * WEEK
 
 
 def _fetch_usage() -> dict:
@@ -122,35 +89,35 @@ def _fetch_usage() -> dict:
 
 @router.get("/usage")
 async def usage():
-    """Return normalized Ollama Cloud usage for the desktop chip/popover."""
+    """Return normalized Ollama Cloud usage for the desktop chip/popover.
+
+    ``usage`` is a 0-1 fraction of the monthly allowance; ``models`` is the
+    per-model request count for the current month. ``resets_at`` is always null
+    because the resets on your plan's subscription anniversary, which the API
+    does not expose (``activity.period`` is a rolling 4-week window, unrelated).
+    """
     raw = _fetch_usage()
 
     limits = raw.get("limits", {}) or {}
-    session = limits.get("session", {}) or {}
-    weekly = limits.get("weekly", {}) or {}
+    monthly = limits.get("monthly", {}) or {}
     activity = raw.get("activity", {}) or {}
     period = activity.get("period", {}) or {}
 
-    now = datetime.now(timezone.utc)
-    starting_at = _parse_iso(period.get("starting_at", ""))
-    weekly_reset = _next_weekly_reset(now, starting_at)
-
     return {
         "activity": activity,
-        "session": {
-            "usage": session.get("usage", 0.0),
-            "models": session.get("models", []),
-            # Rolling 5h window with no API-exposed anchor — no reliable reset.
+        "monthly": {
+            "usage": monthly.get("usage", 0.0),
+            "models": monthly.get("models", []),
+            # Resets on the plan's subscription anniversary (day-of-month your
+            # plan started) — monthly reset date is not in the API payload, so
+            # omit the countdown rather than show a guess.
             "resets_at": None,
+            "period": period,
         },
-        "weekly": {
-            "usage": weekly.get("usage", 0.0),
-            "models": weekly.get("models", []),
-            "resets_at": weekly_reset.isoformat() if weekly_reset else None,
-        },
-        "fetched_at": now.isoformat(),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
         "note": (
-            "Weekly reset derived from activity.period.starting_at; session reset "
-            "is a rolling 5h window the API does not expose."
+            "Ollama measures usage monthly (usage credits). It resets on your "
+            "plan's subscription anniversary, which the /api/usage endpoint "
+            "does not expose — no auto countdown."
         ),
     }

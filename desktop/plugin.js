@@ -1,10 +1,14 @@
 /**
- * Ollama Cloud Usage — desktop plugin (statusbar chip + popover + pane).
+ * Ollama Cloud Usage — desktop plugin (statusbar chip + popover).
  *
  * Reads the plugin's own backend namespace via `ctx.rest('/usage')`, which the
  * SDK routes to `/api/plugins/ollama-cloud-usage/usage` (the FastAPI router in
  * dashboard/plugin_api.py). That backend proxies the official
  * ollama.com/api/usage endpoint — no cookie scraping.
+ *
+ * Ollama now bills usage as a MONTHLY usage-credit pool: a single
+ * `limits.monthly` fraction + per-model request counts. The chip shows
+ * `M:<pct>`; the popover a single ring + "This month" model breakdown.
  *
  * Ships OFF by default (defaultEnabled: false).
  *
@@ -83,17 +87,6 @@ function Logo({ size = 13 }) {
 function pct(value) {
   const n = Number(value) || 0
   return Math.max(0, Math.min(1, n))
-}
-
-function fmtReset(iso) {
-  if (!iso) return ''
-  const diff = new Date(iso).getTime() - Date.now()
-  if (diff <= 0) return 'now'
-  const mins = Math.round(diff / 60000)
-  if (mins < 60) return `${mins}m`
-  const hrs = Math.floor(mins / 60)
-  const rem = mins % 60
-  return rem ? `${hrs}h ${rem}m` : `${hrs}h`
 }
 
 function colorFor(value) {
@@ -321,7 +314,7 @@ function UsageContent({ compact }) {
       children: 'Loading…'
     })
   } else {
-    // Two ring gauges side by side.
+    // Single ring gauge for the monthly usage credit pool.
     const rings = jsxs('div', {
       style: {
         display: 'flex',
@@ -333,33 +326,18 @@ function UsageContent({ compact }) {
         jsxs('div', {
           style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
           children: [
-            jsx(Ring, { value: data.session?.usage }),
-            jsx('span', { style: { fontSize: 11, color: C.secondary }, children: 'Session' }),
+            jsx(Ring, { value: data.monthly?.usage, size: 84 }),
+            jsx('span', { style: { fontSize: 11, color: C.secondary }, children: 'This month' }),
             jsx('span', {
               style: { fontSize: 10, color: C.quaternary },
-              children: data.session?.resets_at
-                ? `resets in ${fmtReset(data.session.resets_at)}`
-                : 'rolling 5h window'
-            })
-          ]
-        }),
-        jsxs('div', {
-          style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
-          children: [
-            jsx(Ring, { value: data.weekly?.usage }),
-            jsx('span', { style: { fontSize: 11, color: C.secondary }, children: 'Weekly' }),
-            jsx('span', {
-              style: { fontSize: 10, color: C.quaternary },
-              children: data.weekly?.resets_at ? `resets in ${fmtReset(data.weekly.resets_at)}` : ''
+              children: 'resets on plan anniversary'
             })
           ]
         })
       ]
     })
 
-    // Per-model breakdowns. Session first (the window you're actively burning)
-    // and only when it has activity — a fresh 5h window has no models yet.
-    // Weekly follows as the broader context.
+    // Per-model breakdown for the current month.
     const section = (key, title, models, max) =>
       jsxs(
         'div',
@@ -379,18 +357,12 @@ function UsageContent({ compact }) {
         key
       )
 
-    const sessionModels = data.session?.models || []
-    const sections = []
-    if (sessionModels.length > 0) {
-      sections.push(section('session', 'This session', sessionModels, compact ? 132 : 240))
-    }
-    sections.push(
-      section('weekly', 'This week', data.weekly?.models, compact ? 140 : 260)
-    )
-
+    const monthlyModels = data.monthly?.models || []
     const breakdown = jsxs('div', {
       style: { display: 'flex', flexDirection: 'column', gap: 12 },
-      children: sections
+      children: [
+        section('monthly', 'This month', monthlyModels, compact ? 260 : 320)
+      ]
     })
 
     body = jsxs('div', {
@@ -418,33 +390,20 @@ function ChipLabel() {
     refetchInterval: 60_000
   })
 
-  // The logo stays neutral; each percentage is tinted by its own severity
-  // (accent under 75%, yellow >=75%, red >=90%) — same scale as the gauges.
+  // The logo stays neutral; the percentage is tinted by its own severity
+  // (accent under 75%, yellow >=75%, red >=90%) — same scale as the gauge.
   let content
   if (error) {
     content = jsx('span', { style: { color: C.bad }, children: 'err' })
   } else if (!data) {
     content = jsx('span', { style: { color: C.tertiary }, children: '…' })
   } else {
-    const sv = pct(data.session?.usage)
-    const wv = pct(data.weekly?.usage)
+    const mv = pct(data.monthly?.usage)
     content = jsxs('span', {
-      style: { display: 'inline-flex', gap: 5 },
+      style: { display: 'inline-flex', gap: 5, color: colorFor(mv) },
       children: [
-        jsxs('span', {
-          style: { color: colorFor(sv) },
-          children: [
-            jsx('span', { style: { color: C.quaternary }, children: 'S:' }),
-            `${Math.round(sv * 100)}%`
-          ]
-        }),
-        jsxs('span', {
-          style: { color: colorFor(wv) },
-          children: [
-            jsx('span', { style: { color: C.quaternary }, children: 'W:' }),
-            `${Math.round(wv * 100)}%`
-          ]
-        })
+        jsx('span', { style: { color: C.quaternary }, children: 'M:' }),
+        `${Math.round(mv * 100)}%`
       ]
     })
   }
@@ -468,7 +427,7 @@ export default {
   id: ID,
   name: 'Ollama Cloud Usage',
   description:
-    'Live Ollama Cloud usage — session & weekly quotas and per-model request counts, from the official /api/usage endpoint.',
+    'Live Ollama Cloud usage — monthly usage credit pool and per-model request counts, from the official /api/usage endpoint.',
   defaultEnabled: false,
   register(ctx) {
     rest = ctx.rest

@@ -1,5 +1,5 @@
 name: ollama-cloud-usage
-version: 1.0.0
-description: "Show Ollama Cloud usage (session + weekly quotas, per-model request counts) in the Hermes desktop app — statusbar chip + detailed pane. Reads the official https://ollama.com/api/usage endpoint; no cookie scraping."
+version: 1.1.0
+description: "Show Ollama Cloud usage (monthly usage-credit pool, per-model request counts) in the Hermes desktop app — statusbar chip + popover. Reads the official https://ollama.com/api/usage endpoint; no cookie scraping."
 author: mpartipilo
 license: MIT
